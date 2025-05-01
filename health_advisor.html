@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Health Advisor - Medicine Recommendation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4a6bff;
+            --secondary-color: #f8f9fa;
+            --ai-color: #10a37f;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--secondary-color);
+        }
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary-color), var(--ai-color));
+            color: white;
+            padding: 3rem 0;
+            border-radius: 0 0 20px 20px;
+            margin-bottom: 2rem;
+        }
+        .symptom-tag {
+            display: inline-flex;
+            align-items: center;
+            background-color: #e3f2fd;
+            color: var(--primary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .medicine-card {
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s ease;
+        }
+        .medicine-card.ai-enhanced {
+            border-left: 4px solid var(--ai-color);
+        }
+        .medicine-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .loading-spinner {
+            display: none;
+        }
+        #symptomsContainer {
+            min-height: 50px;
+        }
+        .ai-badge {
+            background-color: var(--ai-color);
+        }
+        .ai-response {
+            background-color: #f0f9f6;
+            border-left: 4px solid var(--ai-color);
+            padding: 1rem;
+            border-radius: 0 5px 5px 0;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-section text-center">
+        <div class="container">
+            <h1 class="display-4"><i class="bi bi-robot"></i> AI Health Advisor</h1>
+            <p class="lead">Get AI-powered medicine recommendations based on your symptoms</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h4 class="card-title mb-4">Tell us about your condition</h4>
+                        
+                        <div class="mb-3">
+                            <label for="ageInput" class="form-label">Your Age</label>
+                            <input type="number" class="form-control" id="ageInput" min="1" max="120" placeholder="Enter your age" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="genderInput" class="form-label">Gender</label>
+                            <select class="form-select" id="genderInput">
+                                <option value="unspecified">Prefer not to say</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="symptomInput" class="form-label">Your Symptoms</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="symptomInput" placeholder="e.g., headache, fever, cough">
+                                <button class="btn btn-outline-secondary" id="addSymptomBtn">Add</button>
+                            </div>
+                            <div class="form-text">Add each symptom separately or describe multiple symptoms together</div>
+                        </div>
+                        
+                        <div id="symptomsContainer" class="d-flex flex-wrap mb-3 p-2 border rounded">
+                            <div class="text-muted" id="noSymptomsText">No symptoms added yet</div>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="useAICheckbox" checked>
+                            <label class="form-check-label" for="useAICheckbox">
+                                <i class="bi bi-robot"></i> Enhance with AI analysis
+                            </label>
+                        </div>
+                        
+                        <button class="btn btn-primary w-100 py-2" id="analyzeBtn">
+                            <span id="analyzeText">Analyze Symptoms</span>
+                            <div id="loadingSpinner" class="spinner-border spinner-border-sm loading-spinner" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="resultsSection" style="display: none;">
+                    <h4 class="mb-3">Recommended Treatment</h4>
+                    <div id="resultsContainer">
+                        <!-- Results will appear here -->
+                    </div>
+                    
+                    <div class="alert alert-warning mt-4">
+                        <strong>Important:</strong> This is not a substitute for professional medical advice. Always consult with a healthcare provider before taking any medication.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========================
+        // SIMULATED DATABASE
+        // ========================
+        const medicineDatabase = {
+            // Pain/Fever
+            "paracetamol": {
+                name: "Paracetamol (Acetaminophen)",
+                uses: ["headache", "fever", "mild pain", "body ache"],
+                dosage: {
+                    adult: "500-1000mg every 4-6 hours (max 4000mg/day)",
+                    child: "10-15mg/kg per dose (every 4-6 hours)",
+                    elderly: "500mg every 6 hours (max 3000mg/day)"
+                },
+                contraindications: ["liver disease"],
+                sideEffects: ["liver damage (in overdose)"],
+                otc: true
+            },
+            
+            // Inflammation/Pain
+            "ibuprofen": {
+                name: "Ibuprofen",
+                uses: ["headache", "fever", "pain", "inflammation", "muscle pain"],
+                dosage: {
+                    adult: "200-400mg every 4-6 hours (max 1200mg/day)",
+                    child: "5-10mg/kg per dose (every 6-8 hours)",
+                    elderly: "200mg every 8 hours"
+                },
+                contraindications: ["stomach ulcer", "kidney disease", "asthma"],
+                sideEffects: ["stomach pain", "heartburn"],
+                otc: true
+            },
+            
+            // Allergy
+            "cetirizine": {
+                name: "Cetirizine",
+                uses: ["allergies", "itching", "hives", "runny nose", "sneezing"],
+                dosage: {
+                    adult: "10mg once daily",
+                    child: "5mg once daily (6-12 years)",
+                    elderly: "5mg once daily"
+                },
+                contraindications: ["kidney disease"],
+                sideEffects: ["drowsiness", "dry mouth"],
+                otc: true
+            },
+            
+            // Cough
+            "dextromethorphan": {
+                name: "Dextromethorphan",
+                uses: ["dry cough"],
+                dosage: {
+                    adult: "10-20mg every 4 hours (max 120mg/day)",
+                    child: "Not recommended under 4 years",
+                    elderly: "10mg every 6 hours"
+                },
+                contraindications: ["asthma", "taking MAO inhibitors"],
+                sideEffects: ["dizziness", "nausea"],
+                otc: true
+            },
+            
+            // Cold/Flu
+            "pseudoephedrine": {
+                name: "Pseudoephedrine",
+                uses: ["nasal congestion", "sinus pressure"],
+                dosage: {
+                    adult: "30-60mg every 4-6 hours (max 240mg/day)",
+                    child: "Not recommended under 12 years",
+                    elderly: "30mg every 6 hours"
+                },
+                contraindications: ["high blood pressure", "heart disease"],
+                sideEffects: ["insomnia", "nervousness"],
+                otc: true
+            },
+            
+            // Antacid
+            "omeprazole": {
+                name: "Omeprazole",
+                uses: ["heartburn", "acid reflux", "indigestion"],
+                dosage: {
+                    adult: "20mg once daily before meal",
+                    child: "Not recommended under 1 year",
+                    elderly: "20mg once daily"
+                },
+                contraindications: [],
+                sideEffects: ["headache", "diarrhea"],
+                otc: true
+            },
+            
+            // Antidiarrheal
+            "loperamide": {
+                name: "Loperamide",
+                uses: ["diarrhea"],
+                dosage: {
+                    adult: "4mg initially, then 2mg after each loose stool (max 16mg/day)",
+                    child: "Not recommended under 6 years",
+                    elderly: "2mg initially, then 1mg after each loose stool (max 8mg/day)"
+                },
+                contraindications: ["dysentery", "fever with diarrhea"],
+                sideEffects: ["constipation", "dizziness"],
+                otc: true
+            },
+            
+            // Antihistamine
+            "loratadine": {
+                name: "Loratadine",
+                uses: ["allergies", "hay fever", "itching"],
+                dosage: {
+                    adult: "10mg once daily",
+                    child: "5mg once daily (2-12 years)",
+                    elderly: "10mg once daily"
+                },
+                contraindications: ["liver disease"],
+                sideEffects: ["headache", "fatigue"],
+                otc: true
+            }
+        };
+
+        // ========================
+        // FRONTEND FUNCTIONALITY
+        // ========================
+        document.addEventListener('DOMContentLoaded', function() {
+            const ageInput = document.getElementById('ageInput');
+            const genderInput = document.getElementById('genderInput');
+            const symptomInput = document.getElementById('symptomInput');
+            const addSymptomBtn = document.getElementById('addSymptomBtn');
+            const symptomsContainer = document.getElementById('symptomsContainer');
+            const noSymptomsText = document.getElementById('noSymptomsText');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const analyzeText = document.getElementById('analyzeText');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const useAICheckbox = document.getElementById('useAICheckbox');
+            
+            let symptoms = [];
+            
+            // Add symptom
+            addSymptomBtn.addEventListener('click', function() {
+                const symptom = symptomInput.value.trim().toLowerCase();
+                
+                if (symptom) {
+                    // Check if it's a complex description (multiple symptoms in one)
+                    if (symptom.includes(',') || symptom.includes(' and ') || symptom.split(' ').length > 3) {
+                        // If AI is enabled, let the AI parse it later
+                        symptoms.push(symptom);
+                    } else {
+                        // Single symptom
+                        if (!symptoms.includes(symptom)) {
+                            symptoms.push(symptom);
+                        }
+                    }
+                    
+                    updateSymptomsDisplay();
+                    symptomInput.value = '';
+                    symptomInput.focus();
+                }
+            });
+            
+            // Allow adding with Enter key
+            symptomInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addSymptomBtn.click();
+                }
+            });
+            
+            // Analyze symptoms
+            analyzeBtn.addEventListener('click', async function() {
+                const age = parseInt(ageInput.value);
+                const gender = genderInput.value;
+                const useAI = useAICheckbox.checked;
+                
+                if (!age || age < 1 || age > 120) {
+                    showAlert('Please enter a valid age (1-120)', 'danger');
+                    return;
+                }
+                
+                if (symptoms.length === 0) {
+                    showAlert('Please add at least one symptom', 'danger');
+                    return;
+                }
+                
+                // Show loading state
+                analyzeText.style.display = 'none';
+                loadingSpinner.style.display = 'inline-block';
+                analyzeBtn.disabled = true;
+                
+                try {
+                    let recommendations;
+                    let aiResponse = null;
+                    
+                    if (useAI) {
+                        // Call AI analysis
+                        const response = await analyzeWithAI(age, gender, symptoms);
+                        recommendations = response.recommendations;
+                        aiResponse = response.aiResponse;
+                    } else {
+                        // Use basic analysis
+                        recommendations = getBasicRecommendations(age, symptoms);
+                    }
+                    
+                    displayResults(recommendations, age, symptoms, aiResponse);
+                } catch (error) {
+                    console.error("Error analyzing symptoms:", error);
+                    showAlert('An error occurred while analyzing your symptoms. Please try again.', 'danger');
+                } finally {
+                    // Hide loading state
+                    analyzeText.style.display = 'inline';
+                    loadingSpinner.style.display = 'none';
+                    analyzeBtn.disabled = false;
+                }
+            });
+            
+            function updateSymptomsDisplay() {
+                if (symptoms.length === 0) {
+                    noSymptomsText.style.display = 'block';
+                    symptomsContainer.innerHTML = '';
+                    symptomsContainer.appendChild(noSymptomsText);
+                    return;
+                }
+                
+                noSymptomsText.style.display = 'none';
+                symptomsContainer.innerHTML = '';
+                
+                symptoms.forEach((symptom, index) => {
+                    const symptomElement = document.createElement('div');
+                    symptomElement.className = 'symptom-tag';
+                    symptomElement.innerHTML = `
+                        ${symptom}
+                        <button class="btn-close btn-close-white ms-2" style="font-size: 0.5rem;" 
+                                data-index="${index}" aria-label="Remove"></button>
+                    `;
+                    symptomsContainer.appendChild(symptomElement);
+                });
+                
+                // Add event listeners to remove buttons
+                document.querySelectorAll('#symptomsContainer .btn-close').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const index = parseInt(this.getAttribute('data-index'));
+                        symptoms.splice(index, 1);
+                        updateSymptomsDisplay();
+                    });
+                });
+            }
+            
+            function getBasicRecommendations(age, symptoms) {
+                // Simple symptom to medicine mapping
+                const symptomMapping = {
+                    "headache": ["paracetamol", "ibuprofen"],
+                    "fever": ["paracetamol", "ibuprofen"],
+                    "pain": ["paracetamol", "ibuprofen"],
+                    "body ache": ["paracetamol", "ibuprofen"],
+                    "inflammation": ["ibuprofen"],
+                    "muscle pain": ["ibuprofen"],
+                    "allergies": ["cetirizine", "loratadine"],
+                    "itching": ["cetirizine", "loratadine"],
+                    "hives": ["cetirizine"],
+                    "runny nose": ["cetirizine", "loratadine", "pseudoephedrine"],
+                    "sneezing": ["cetirizine", "loratadine"],
+                    "dry cough": ["dextromethorphan"],
+                    "nasal congestion": ["pseudoephedrine"],
+                    "sinus pressure": ["pseudoephedrine"],
+                    "heartburn": ["omeprazole"],
+                    "acid reflux": ["omeprazole"],
+                    "indigestion": ["omeprazole"],
+                    "diarrhea": ["loperamide"],
+                    "hay fever": ["loratadine"]
+                };
+                
+                // Find relevant medicines
+                const recommendedMedicines = new Set();
+                
+                symptoms.forEach(symptom => {
+                    // Check if this exact symptom is in our mapping
+                    if (symptomMapping[symptom]) {
+                        symptomMapping[symptom].forEach(medicine => {
+                            recommendedMedicines.add(medicine);
+                        });
+                    } else {
+                        // Check for partial matches (basic fuzzy matching)
+                        for (const [key, meds] of Object.entries(symptomMapping)) {
+                            if (symptom.includes(key) || key.includes(symptom)) {
+                                meds.forEach(medicine => {
+                                    recommendedMedicines.add(medicine);
+                                });
+                            }
+                        }
+                    }
+                });
+                
+                // Filter based on age and contraindications
+                const ageGroup = age < 12 ? 'child' : age > 65 ? 'elderly' : 'adult';
+                const finalRecommendations = [];
+                
+                recommendedMedicines.forEach(medicineId => {
+                    const medicine = medicineDatabase[medicineId];
+                    
+                    // Check if suitable for age group
+                    if (medicine.dosage[ageGroup]) {
+                        finalRecommendations.push({
+                            ...medicine,
+                            id: medicineId,
+                            ageGroup: ageGroup,
+                            aiEnhanced: false
+                        });
+                    }
+                });
+                
+                return finalRecommendations;
+            }
+            
+            async function analyzeWithAI(age, gender, symptoms) {
+                // Simulate API delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                const symptomText = symptoms.join(', ');
+                const ageGroup = age < 12 ? 'child' : age > 65 ? 'elderly' : 'adult';
+                
+                // Simulated AI response
+                const simulatedAIResponse = {
+                    medicines: [],
+                    advice: `Based on your symptoms (${symptomText}), age (${age}), and gender (${gender}), 
+                            I recommend considering the following approaches. For persistent or severe symptoms, 
+                            please consult a healthcare professional.`
+                };
+                
+                // Get basic recommendations
+                const basicRecommendations = getBasicRecommendations(age, symptoms);
+                
+                // Add AI enhancements
+                const enhancedRecommendations = basicRecommendations.map(med => {
+                    // Simulate AI adding additional context
+                    let aiNotes = '';
+                    
+                    if (med.id === 'ibuprofen' && age > 60) {
+                        aiNotes = 'May increase risk of stomach bleeding in older adults. Consider taking with food.';
+                    } else if (med.id === 'cetirizine' && symptoms.includes('runny nose')) {
+                        aiNotes = 'Can help with both allergic rhinitis and runny nose symptoms.';
+                    } else if (med.id === 'omeprazole' && symptoms.includes('heartburn')) {
+                        aiNotes = 'Most effective when taken 30-60 minutes before a meal for heartburn relief.';
+                    }
+                    
+                    return {
+                        ...med,
+                        aiEnhanced: true,
+                        aiNotes: aiNotes
+                    };
+                });
+                
+                // Simulate AI adding additional recommendations
+                if (symptoms.some(s => s.includes('sore throat'))) {
+                    enhancedRecommendations.push({
+                        ...medicineDatabase['paracetamol'],
+                        id: 'paracetamol',
+                        ageGroup: ageGroup,
+                        aiEnhanced: true,
+                        aiNotes: 'Can help relieve pain from sore throat. Also consider throat lozenges and warm salt water gargles.'
+                    });
+                }
+                
+                if (symptoms.some(s => s.includes('congestion') || symptoms.some(s => s.includes('sinus')))) {
+                    if (!enhancedRecommendations.some(m => m.id === 'pseudoephedrine')) {
+                        enhancedRecommendations.push({
+                            ...medicineDatabase['pseudoephedrine'],
+                            id: 'pseudoephedrine',
+                            ageGroup: ageGroup,
+                            aiEnhanced: true,
+                            aiNotes: 'Can help relieve nasal and sinus congestion. Avoid if you have high blood pressure.'
+                        });
+                    }
+                }
+                
+                simulatedAIResponse.medicines = enhancedRecommendations;
+                
+                return {
+                    recommendations: enhancedRecommendations,
+                    aiResponse: simulatedAIResponse
+                };
+            }
+            
+            function displayResults(recommendations, age, symptoms, aiResponse = null) {
+                resultsContainer.innerHTML = '';
+                
+                if (aiResponse) {
+                    // Show AI summary
+                    const aiCard = document.createElement('div');
+                    aiCard.className = 'ai-response mb-4';
+                    aiCard.innerHTML = `
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-robot me-2"></i>
+                            <h5 class="mb-0">AI Health Analysis</h5>
+                        </div>
+                        <p>${aiResponse.advice}</p>
+                    `;
+                    resultsContainer.appendChild(aiCard);
+                }
+                
+                if (recommendations.length === 0) {
+                    const noResultsCard = document.createElement('div');
+                    noResultsCard.className = 'alert alert-warning';
+                    noResultsCard.innerHTML = `
+                        <h5>No specific recommendations found</h5>
+                        <p>For your symptoms (${symptoms.join(', ')}), we couldn't find specific over-the-counter recommendations.</p>
+                        <p>Please consult with a healthcare provider for proper diagnosis and treatment.</p>
+                    `;
+                    resultsContainer.appendChild(noResultsCard);
+                } else {
+                    const summaryCard = document.createElement('div');
+                    summaryCard.className = 'alert alert-info mb-4';
+                    summaryCard.innerHTML = `
+                        <h5>For ${age} year old with: ${symptoms.join(', ')}</h5>
+                        <p class="mb-0">These over-the-counter options may help relieve your symptoms:</p>
+                    `;
+                    resultsContainer.appendChild(summaryCard);
+                    
+                    recommendations.forEach(medicine => {
+                        const card = document.createElement('div');
+                        card.className = `medicine-card card mb-3 ${medicine.aiEnhanced ? 'ai-enhanced' : ''}`;
+                        card.innerHTML = `
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h5>${medicine.name}</h5>
+                                    <div>
+                                        ${medicine.otc ? '<span class="badge bg-success me-1">OTC</span>' : ''}
+                                        ${medicine.aiEnhanced ? '<span class="badge ai-badge me-1"><i class="bi bi-robot"></i> AI</span>' : ''}
+                                    </div>
+                                </div>
+                                
+                                <div class="my-2">
+                                    <strong>For:</strong> ${medicine.uses.join(', ')}
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-2">
+                                            <strong>Recommended Dosage:</strong>
+                                            <div>${medicine.dosage[medicine.ageGroup]}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-2">
+                                            <strong>Possible Side Effects:</strong>
+                                            <div>${medicine.sideEffects.join(', ') || 'None common'}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                ${medicine.aiNotes ? `
+                                    <div class="alert alert-info mt-2 p-2">
+                                        <strong><i class="bi bi-robot"></i> AI Note:</strong> 
+                                        ${medicine.aiNotes}
+                                    </div>
+                                ` : ''}
+                                
+                                ${medicine.contraindications.length > 0 ? `
+                                    <div class="alert alert-warning mt-2 p-2">
+                                        <strong>Precautions:</strong> Not recommended if you have: 
+                                        ${medicine.contraindications.join(', ')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                        resultsContainer.appendChild(card);
+                    });
+                }
+                
+                resultsSection.style.display = 'block';
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            function showAlert(message, type) {
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+                resultsSection.style.display = 'block';
+            }
+        });
+    </script>
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
